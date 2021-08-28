@@ -1,5 +1,6 @@
 from classes.app import App
 
+
 def main():
     # Create the entire GUI program
     app = App()
