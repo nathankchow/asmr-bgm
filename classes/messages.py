@@ -7,7 +7,7 @@ class Messages:
         self.max = 6 #max number of messages geted
         self.length = 0 
         self.beg = 0 #beginning index
-        self.string = StringVar(other.window, ' \n \n \n \n \n ') #empty 6 lines
+        self.string = StringVar(other.window, '\n'.join([' ' for i in range(self.max)]))
 
     def post(self,msg): #top of stack is 0th index
         self.stack.insert(0,msg)
@@ -36,8 +36,8 @@ class Messages:
             else:
                 break
         
-        while len(temp) != 6:
-            temp.append('')
+        while len(temp) != self.max:
+            temp.append(' ')
 
         self.string = '\n'.join(temp)
         return self.string

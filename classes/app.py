@@ -1,23 +1,36 @@
 '''
 EXAMPLES
 # defining the callback function (observer)
-def my_callback(var, indx, mode):
+def my_callback({self}, var, indx, mode):
     print ("Traced variable {}".format(my_var.get())
 
 BUGS
-when song replays, will start from last place clicked, as opposed from the begining
 
 NOTES
 wav position seeking is impossible (pygame limitation)
+check other file types
 
+all buttons:
+-mix
+asmr select
+asmr clear
+bgm select
+bgm clear
+exit 
 
+checkboxes
+mute all audio tracks
+copy into lib.
+manually set output file name
+manually set output directory
+concatenate asmr files for previewing and mixing 
+
+other: 
+native functions 
 TODO
-add labels for mimikaki and bgm songs
-add buttons for clearing mimikaki and bgm songs 
-add a mute checkbox 
-add an option for processing ASMR files separately 
-properly arrage the widgets on window 
+
 rewrite select asmr + select bgm functions, adding log as needed 
+add functionality to clear, mute, song labels
 rewrite song playing functionality  
 do experiments + remove audio mixing bugs 
 '''
@@ -37,9 +50,12 @@ import threading
 
 class App:
     def __init__(self):
+        self.MIN_X = 640
+        self.MIN_Y = 540
         self.window = tk.Tk()
-        self.window.geometry("640x580")
-        self.window.minsize(640,580)
+        #self.window.geometry("640x560")
+        self.window.minsize(self.MIN_X,self.MIN_Y)
+        self.window.maxsize(self.MIN_X,self.MIN_Y)
         self.window.title("asmr-bgm-gui")
         pygame.init()
         pygame.mixer.init()
@@ -53,68 +69,118 @@ class App:
         self.fasp = False #freeze auto song position, for when user is clicking on seeking slider 
 
         self.create_widgets()
+        self.position_widgets()
         self.post('Welcome to asmr-bgm-gui.')
         
 
     def create_widgets(self):
+        self.asmr_bgm_frame = tk.Frame(self.window)
+        self.asmr_frame = tk.Frame(self.asmr_bgm_frame,borderwidth=1,relief=tk.RIDGE)
+        self.bgm_frame = tk.Frame(self.asmr_bgm_frame,borderwidth=1,relief=tk.RIDGE)
+        self.asmr_button_frame = tk.Frame(self.asmr_frame)
+        self.bgm_button_frame = tk.Frame(self.bgm_frame)
+
+        #button initialization + bindings
+        self.log_frame = tk.Frame(self.window)
+        self.arrow_frame = tk.Frame(self.log_frame)
+        self.arrow_frame.columnconfigure(0,weight=1)
+
         self.mix_button = tk.Button(self.window, text="Mix!", command = self.Mix)
-        self.mix_button.pack(fill="x")
         
-        self.select_asmr_track_button = tk.Button(self.window, text="Select ASMR track", command = self.Select_asmr_track)
-        self.select_bgm_track_button = tk.Button(self.window, text="Select BGM track", command = self.Select_bgm_track)
-        self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
+        self.s1 = tk.StringVar(self.window, "00:00:00 / 00:00:00")
+        self.s1.trace('w',self.update)
+        self.duration_label = tk.Label(self.window,text=self.s1.get()) 
 
-        self.asmr_volume_label = tk.Label(self.window, text = "ASMR Volume")
-        self.asmr_volume_scale = tk.Scale(self.window,from_=0.0,to_=100.0, orient = tk.HORIZONTAL, resolution = 1, command=self.Asmr_volume)
-        self.asmr_volume_scale.set(20)
-
-        self.bgm_volume_label = tk.Label(self.window, text = "BGM Volume")
-        self.bgm_volume_scale = tk.Scale(self.window,from_=0.0,to_=100.0, orient = tk.HORIZONTAL, resolution = 1, command=self.Bgm_volume)
-        self.bgm_volume_scale.set(20)
-        
         self.song_position_scale = tk.Scale(self.window,from_=0, to_=1, orient=tk.HORIZONTAL, resolution = 0.0001, showvalue=False)
         self.song_position_scale.bind('<ButtonPress>',self.Freeze_auto_song_position)
         self.song_position_scale.bind('<ButtonRelease>', self.Song_position_manual)
-        self.s1 = tk.StringVar(self.window, "00:00:00 / 00:00:00")
-        self.duration_label = tk.Label(self.window,text=self.s1.get())
-        self.duration_label.pack()
-        self.song_position_label = tk.Label(self.window, text='')
 
+        self.asmr_l = tk.Label(self.asmr_frame, text = "No track")
+        self.asmr_volume_label = tk.Label(self.asmr_frame, text = "ASMR Volume")
+        self.asmr_volume_scale = tk.Scale(self.asmr_frame,from_=0.0,to_=100.0, orient = tk.HORIZONTAL, resolution = 1, command=self.Asmr_volume)
+        self.asmr_volume_scale.set(20)
+        self.asmr_clear_b = tk.Button(self.asmr_button_frame, text = "Clear", command = self.foo())
+        self.select_asmr_track_button = tk.Button(self.asmr_button_frame, text="Select ASMR track", command = self.Select_asmr_track)
+
+
+        self.bgm_l = tk.Label(self.bgm_frame, text = "No track")
+        self.bgm_volume_label = tk.Label(self.bgm_frame, text = "BGM Volume")
+        self.bgm_volume_scale = tk.Scale(self.bgm_frame,from_=0.0,to_=100.0, orient = tk.HORIZONTAL, resolution = 1, command=self.Bgm_volume)
+        self.bgm_volume_scale.set(20)
+        self.bgm_clear_b = tk.Button(self.bgm_button_frame, text = "Clear", command = self.foo())
         
-
-        self.song_position_scale.pack(fill="x")
-
-        self.song_position_label.pack()
-        self.asmr_volume_label.pack()
-        self.asmr_volume_scale.pack(fill="x")
-        self.bgm_volume_label.pack()
-        self.bgm_volume_scale.pack(fill="x")
-        self.select_asmr_track_button.pack(fill="x")
-        self.select_bgm_track_button.pack(fill="x")
-
+        self.select_bgm_track_button = tk.Button(self.bgm_button_frame, text="Select BGM track", command = self.Select_bgm_track)
+ 
         self.c1v = tk.BooleanVar(self.window,False)
-        self.c1 = tk.Checkbutton(self.window, text='Add loaded audio tracks to library directory', variable=self.c1v)
-        self.c1.pack(fill='x')
+        self.c1 = tk.Checkbutton(self.window, text='Mute all audio tracks', variable=self.c1v)
 
         self.c2v = tk.BooleanVar(self.window,False)
-        self.c2 = tk.Checkbutton(self.window, text='Manually set output directory', variable=self.c2v)
-        self.c2.pack(fill='x')
+        self.c2 = tk.Checkbutton(self.window, text='Copy loaded audio tracks into library directory', variable=self.c2v)
 
         self.c3v = tk.BooleanVar(self.window,False)
-        self.c3 = tk.Checkbutton(self.window, text='Manually set output file name', variable=self.c3v)
-        self.c3.pack(fill='x')
+        self.c3 = tk.Checkbutton(self.window, text='Manually set output directory', variable=self.c3v)
 
-        self.log = tk.Label(self.window, text=self.messages.get(), justify=tk.LEFT, anchor='w')
-        self.log.pack(fill='x')
+        self.c4v = tk.BooleanVar(self.window,False)
+        self.c4 = tk.Checkbutton(self.window, text='Manually set output file name', variable=self.c4v)
+
+        self.c5v = tk.BooleanVar(self.window,False)
+        self.c5 = tk.Checkbutton(self.window, text='Concatenate ASMR files for previewing and mixing', variable=self.c5v)
+
         
-        tk.Button(self.window,text='↑',command=self.up).pack()
-        tk.Button(self.window,text='↓',command=self.down).pack()
+        self.log = tk.Label(self.log_frame, text=self.messages.get(), justify=tk.LEFT, anchor='w', relief=tk.SUNKEN, bg="#C0C0C0")
+        
+        self.upb = tk.Button(self.arrow_frame,text='↑',command=self.up)
+        self.downb = tk.Button(self.arrow_frame,text='↓',command=self.down)
+
+        self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
+  
+    def position_widgets(self):
+
+        #packing 
+        self.mix_button.pack(fill="x")
+        self.duration_label.pack()
+        self.song_position_scale.pack(fill="x")
+        self.asmr_bgm_frame.pack(fill='x') 
+        self.asmr_bgm_frame.columnconfigure(0,weight=1)
+        self.asmr_bgm_frame.columnconfigure(1,weight=1)
+        self.asmr_frame.grid(row=0,column=0,sticky='nsew')
+        self.bgm_frame.grid(row=0,column=1,sticky='nsew')
+
+        self.asmr_volume_label.pack(fill='x')
+        self.asmr_volume_scale.pack(fill='x')
+        self.asmr_l.pack(fill='x')
+        self.asmr_button_frame.pack(fill='x')
+        self.asmr_button_frame.columnconfigure(index=0,weight=1)
+        self.asmr_button_frame.columnconfigure(index=1,weight=2)
+        self.select_asmr_track_button.grid(row=0,column=0) 
+        self.asmr_clear_b.grid(row=0,column=1)
+
+        self.bgm_volume_label.pack(fill='x')
+        self.bgm_volume_scale.pack(fill='x')
+        self.bgm_l.pack(fill='x')
+        self.bgm_button_frame.pack(fill='x')
+        self.bgm_button_frame.columnconfigure(index=0,weight=1)
+        self.bgm_button_frame.columnconfigure(index=1,weight=2)
+        self.select_bgm_track_button.grid(row=0,column=0) 
+        self.bgm_clear_b.grid(row=0,column=1)
+        
+        self.c1.pack()
+        self.c2.pack()
+        self.c3.pack()
+        self.c4.pack()
+        self.c5.pack()
+
+        self.log_frame.pack(fill='x')
+        self.arrow_frame.pack(side = tk.RIGHT, fill='y')
+        self.arrow_frame.rowconfigure(0,weight=1)
+        self.arrow_frame.rowconfigure(1,weight=1)
+        self.upb.grid(row=0,column=0,sticky='nsew')
+        self.downb.grid(row=1,column=0,sticky='nsew')
+        self.log.pack(fill='x')
 
         self.exit_button.pack(fill='x')
-
-        self.debug_b = tk.Button(self.window, text='debug',command=self.debug).pack()
-
-        self.s1.trace('w',self.update)
+        
+        tk.Button(self.window, text='debug',command=self.debug).pack() #for debugging purposes 
 
     def update(*args):
         print(args)
@@ -135,8 +201,15 @@ class App:
         self.log.config(text=self.messages.get())
 
     def debug(self):
-        self.post('fefefefefwfa')
+        try:
+            self.add += 1
+        except:
+            self.add = 86  
+        self.post('' + self.add * 'l')
+        self.post(str(self.add))
         self.log.config(text=self.messages.get())
+        #~fits about 93 a's
+        #~fits about 196 l's
 
     def msg_up(self):
         pass
@@ -232,8 +305,6 @@ class App:
                 if self.asmrpath == '':
                     pass
                 else: 
-                #print(int(self.song_position_scale.get() * self.asmr_track_length))//
-                    print('song ended i guess?')
                     print(self.song_position_scale.get())
                     self.song_position_scale.set(0)
                     print(self.song_position_scale.get())
@@ -259,5 +330,5 @@ class App:
     def hhmmss(self,seconds):
         return time.strftime('%H:%M:%S', time.gmtime(seconds))
 
-
-    
+    def foo(self):
+        pass
