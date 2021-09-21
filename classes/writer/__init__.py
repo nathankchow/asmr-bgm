@@ -65,7 +65,7 @@ class Writer:
         #return location of looped file
         return dst
 
-    def mix(self,asmr_file,bgm_file,asmr_weight,bgm_weight,dst = 'library/complete'):
+    def mix(self,asmr_file,bgm_file,asmr_weight,bgm_weight,dst = 'library/output'):
 
         
         #get lengths of both files
@@ -78,7 +78,11 @@ class Writer:
             bgm_file_processed = self.loop(bgm_file, loop_number)
         else:
             bgm_file_processed = bgm_file
-        dst = f"library/complete/{Path(asmr_file).stem}_{Path(bgm_file).stem}_{int(asmr_weight)}_{int(bgm_weight)}.wav"
+        dst = f"library/output/{Path(asmr_file).stem}_{Path(bgm_file).stem}_{int(asmr_weight)}_{int(bgm_weight)}.mp3"
+        dst = os.path.join(os.getcwd(),dst)
+        cmd = f'ffmpeg -i "{asmr_file}" -i "{bgm_file_processed}" -filter_complex amix=inputs=2:duration=first:dropout_transition=2:weights="{asmr_weight} {bgm_weight}" "{dst}"'
+        print(cmd)
+        input('Press enter to continue...\n')
         subprocess.run(f'ffmpeg -i "{asmr_file}" -i "{bgm_file_processed}" -filter_complex amix=inputs=2:duration=first:dropout_transition=2:weights="{asmr_weight} {bgm_weight}" "{dst}"')
 
 

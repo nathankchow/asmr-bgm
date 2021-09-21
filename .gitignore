@@ -2,3 +2,4 @@
 *.wav
 *.ogg
 *.flac
+**/__pycache__/
