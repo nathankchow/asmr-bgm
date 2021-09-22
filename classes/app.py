@@ -26,15 +26,20 @@ manually set output directory
 concatenate asmr files for previewing and mixing 
 
 other: 
-native functions 
+native functions
+
 TODO
+
 rewrite mix function 
+make sure that file does not already exist when mixing 
+test user confirmation windows
 add manual output format + filename functionality to mix
-add multiple asmr file specification functionality 
+add multiple asmr file functionality (batch mix)
 '''
 
 import shutil
 import tkinter.filedialog
+import tkinter.messagebox
 import tkinter.ttk as ttk 
 import tkinter as tk
 import pygame
@@ -142,8 +147,8 @@ class App:
 
         self.output_format = tk.StringVar(self.output_format_frame)
         self.output_format_label = tk.Label(self.output_format_frame,text="Output format")
-        self.output_format.set("Automatic")
-        self.output_format_dropdown = tk.OptionMenu(self.output_format_frame,self.output_format,"Automatic",".mp3",".ogg",".wav",".flac")
+        self.output_format.set("Same as ASMR")
+        self.output_format_dropdown = tk.OptionMenu(self.output_format_frame,self.output_format,"Same as ASMR",".mp3",".ogg",".wav",".flac")
 
         self.log = tk.Label(self.log_frame, text=self.messages.get(), justify=tk.LEFT, anchor='w', relief=tk.SUNKEN, bg="#C0C0C0")
         
@@ -207,13 +212,7 @@ class App:
         tk.Button(self.window, text='debug',command=self.debug).pack() #for debugging purposes 
 
     def debug(self):
-        try:
-            self.add += 1
-        except:
-            self.add = 86  
-        self.post('' + self.add * 'g')
-        self.post(str(self.add))
-        self.log.config(text=self.messages.get())
+        self.foo()
         #~fits about 93 a's
         #~fits about 196 l's
 
@@ -231,7 +230,6 @@ class App:
         self.messages.down()
         self.log.config(text=self.messages.get())
 
-
     def msg_up(self):
         pass
 
@@ -244,7 +242,9 @@ class App:
                 self.asmr_path,
                 self.bgm_path,
                 self.asmr_volume_scale.get(),
-                self.bgm_volume_scale.get()
+                self.bgm_volume_scale.get(),
+                self.automatic_directory.get(),
+                self.output_format.get()
                 ), daemon=True)
             x.start()
         else:
@@ -368,14 +368,12 @@ class App:
                 shutil.copy2(self.bgm_path, file)
                 self.post("Copying completed.")
             elif os.path.isfile(file) == True:
-                self.post("A duplicate file exists in the same directory, copying aborted.")
+                self.post("A duplicate file already exists in the same directory, copying aborted.")
                 #TODO ask user if rename + copy is desired 
 
     
     def Song_position_auto(*args): #stopped music starts when position is moved 
         self = args[0]
-        #print('expected', round(pygame.mixer.music.get_pos())) #debugging statement
-        #print(pygame.mixer.music.get_busy())
         if self.fasp == True:
             self.window.after(500, self.Song_position_auto)
         elif self.fasp == False: 
@@ -422,4 +420,4 @@ class App:
         return time.strftime('%H:%M:%S', time.gmtime(seconds))
 
     def foo(self):
-        pass
+        ans = tk.messagebox.askquestion('Confirmation Window','Are you sure you wish to proceed?')
