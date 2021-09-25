@@ -4,6 +4,10 @@ from pathlib import Path
 import subprocess
 from math import ceil
 import shutil
+import time
+import queue
+import threading
+import random
 
 class Writer:
     def __init__(self):
@@ -59,16 +63,18 @@ class Writer:
 
     
     def loop(self,bgm_file,loop_number):
-        dst = 'temp/looped.mp3'
+        dst = 'temp/looped' + Path(bgm_file).suffix
         #loops an audio file a specified number of times, and outputs to temp folder
         subprocess.run(f'ffmpeg -stream_loop {loop_number} -y -i "{bgm_file}" -c copy "{dst}"')
         #return location of looped file
         return dst
 
-    def mix(self,asmr_file,bgm_file,asmr_weight,bgm_weight,format,dst = 'library/output'):
+    def mix(self,asmr_file,bgm_file,asmr_weight,bgm_weight,format, app = None, dst = 'library/output'):
 
         if format == "Same as ASMR":
+            print("format 1", format)
             format = Path(asmr_file).suffix 
+            print("format 2", format)
         elif format[0] != '.':
             format = '.' + format #make sure suffix has dot at beginning 
 
@@ -85,11 +91,36 @@ class Writer:
         dst = f"library/output/{Path(asmr_file).stem}_{Path(bgm_file).stem}_{int(asmr_weight)}_{int(bgm_weight)}{format}"
         dst = os.path.join(os.getcwd(),dst)
         cmd = f'ffmpeg -i "{asmr_file}" -i "{bgm_file_processed}" -filter_complex amix=inputs=2:duration=first:dropout_transition=2:weights="{asmr_weight} {bgm_weight}" "{dst}"'
+        
         subprocess.run(f'ffmpeg -i "{asmr_file}" -i "{bgm_file_processed}" -filter_complex amix=inputs=2:duration=first:dropout_transition=2:weights="{asmr_weight} {bgm_weight}" "{dst}"')
-
+        
+        print(app)
+        if app != None: 
+            print('posting stomethign')
+            app.post(f"Mixing of {dst} complete.")
 
     def convert_to_mp3(self,files):
         #takes an iterable containing file names and converts them to mp3s 
         for file in files:
             name = Path(file).stem
             subprocess.run(f'ffmpeg -i "{file}" "{name}.mp3"')
+ 
+class WriterQueue(queue.Queue):
+    def __init__(self):
+        super().__init__()
+
+class Consumer(threading.Thread):
+    def __init__(self, wq):
+        self.wq = wq #writer queue instance  
+        super().__init__(daemon=True)
+    
+    def run(self):
+        while True:
+            if self.wq.empty() == False:    
+                print('Getting item..') 
+                task = self.wq.get()
+                print(type(task[1]))
+                task[0](*task[1]) #takes tuple of length 2 containing callable and arguments 
+            time.sleep(1)
+
+

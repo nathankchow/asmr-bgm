@@ -5,6 +5,7 @@ def my_callback({self}, var, indx, mode):
     print ("Traced variable {}".format(my_var.get())
 
 BUGS
+-if message is too long, will not display properly in log 
 
 NOTES
 wav position seeking is impossible (pygame limitation)
@@ -30,11 +31,7 @@ native functions
 
 TODO
 
-rewrite mix function 
-make sure that file does not already exist when mixing 
-test user confirmation windows
-add manual output format + filename functionality to mix
-add multiple asmr file functionality (batch mix)
+
 '''
 
 import shutil
@@ -42,19 +39,23 @@ import tkinter.filedialog
 import tkinter.messagebox
 import tkinter.ttk as ttk 
 import tkinter as tk
+from tkinterdnd2 import * 
 import pygame
 import os
+import sys
 import time
 
+
 from pathlib import Path 
-from classes.writer import Writer
+from classes.writer import Writer, WriterQueue, Consumer
 from classes.messages import Messages
 import threading 
+
 
 class App:
     def __init__(self):
         self.MIN_X = 640
-        self.MIN_Y = 500
+        self.MIN_Y = 800
         self.window = tk.Tk()
         self.window.resizable(0,0) # removes windows-native maximize button
         #self.window.geometry("640x500")
@@ -63,14 +64,26 @@ class App:
         self.window.title("asmr-bgm-gui")
         pygame.init()
         pygame.mixer.init()
+        '''
         self.bgm_path = ''
         self.asmr_path = ''
+        '''
+        self.asmr_path = []
+        self.bgm_path = []
+        self.asmr_pointer = -1
+        self.bgm_pointer = -1 
+        
         self.new_scale_position = 0 
         self.writer = Writer()
         self.messages = Messages(self)
         self.writer_busy = False
         self.writer_queue = [] 
-        self.fasp = False #freeze auto song position, for when user is clicking on seeking slider 
+        self.fasp = False #freeze auto song position, for when user is clicking on seeking slider
+
+
+        self.writer_queue = WriterQueue()
+        self.consumer = Consumer(self.writer_queue)
+        self.consumer.start()
 
         self.create_widgets()
         self.position_widgets()
@@ -92,23 +105,23 @@ class App:
         self.arrow_frame.columnconfigure(0,weight=1)
 
         self.mix_button = tk.Button(self.window, text="Mix!", command = self.mix)
+        self.batch_mix_button = tk.Button(self.window, text="Mix!", command = self.batch_mix)
         
-        self.s1 = tk.StringVar(self.window, "00:00:00 / 00:00:00")
-        self.s1.trace('w',self.update)
-        self.duration_label = tk.Label(self.window,text=self.s1.get())  
+        self.duration_str = tk.StringVar(self.window, "00:00:00 / 00:00:00")
+        self.duration_str.trace('w',self.update)
+        self.duration_label = tk.Label(self.window,text=self.duration_str.get())  
 
         self.song_position_scale = tk.Scale(self.window,from_=0, to_=1, orient=tk.HORIZONTAL, resolution = 0.0001, showvalue=False)
         self.song_position_scale.bind('<ButtonPress>',self.Freeze_auto_song_position)
         self.song_position_scale.bind('<ButtonRelease>', self.Song_position_manual)
         self.song_position_scale.config(state=tk.DISABLED)
 
-        self.asmr_label = tk.Label(self.asmr_frame, text = "No track",width=int(self.MIN_X/2))
+        self.asmr_label = tk.Label(self.asmr_frame, text = "No track", width=int(self.MIN_X/2))
         self.asmr_volume_label = tk.Label(self.asmr_frame, text = "ASMR Volume")
         self.asmr_volume_scale = tk.Scale(self.asmr_frame,from_=0.0,to_=100.0, orient = tk.HORIZONTAL, resolution = 1, command=self.asmr_volume)
         self.asmr_volume_scale.set(20)
         self.asmr_clear_b = tk.Button(self.asmr_button_frame, text = "Clear", command = self.asmr_clear)
-        self.select_asmr_track_button = tk.Button(self.asmr_button_frame, text="Select ASMR track(s)", command = self.select_asmr_track)
-
+        self.asmr_select_button = tk.Button(self.asmr_button_frame, text="Select ASMR track(s)", command = self.asmr_select)
 
 
         self.bgm_label = tk.Label(self.bgm_frame, text = "No track",width=int(self.MIN_X/2))
@@ -117,7 +130,7 @@ class App:
         self.bgm_volume_scale.set(20)
         self.bgm_clear_b = tk.Button(self.bgm_button_frame, text = "Clear", command = self.bgm_clear)
         
-        self.select_bgm_track_button = tk.Button(self.bgm_button_frame, text="Select BGM track", command = self.select_bgm_track)
+        self.bgm_select_button = tk.Button(self.bgm_button_frame, text="Select BGM track", command = self.bgm_select)
  
         self.mute_allv = tk.BooleanVar(self.window,False)
         self.mute_all = tk.Checkbutton(self.window, text='Mute all audio tracks', variable=self.mute_allv)
@@ -156,11 +169,17 @@ class App:
         self.downb = tk.Button(self.arrow_frame,text='↓',command=self.down)
 
         self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
-  
+        #self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
+        self.asmr_left_button = tk.Button(self.asmr_frame, text = '◀', command = self.asmr_left)
+        self.asmr_right_button = tk.Button(self.asmr_frame, text = '▶', command = self.asmr_right)
+        self.bgm_left_button = tk.Button(self.window, text = '◀', command = self.bgm_left)
+        self.bgm_right_button = tk.Button(self.window, text = '▶', command = self.bgm_right)
+    
     def position_widgets(self):
 
         #packing 
         self.mix_button.pack(fill="x")
+        self.batch_mix_button.pack(fill="x")
         self.duration_label.pack()
         self.song_position_scale.pack(fill="x")
         self.asmr_bgm_frame.pack(fill='x') 
@@ -171,11 +190,15 @@ class App:
 
         self.asmr_volume_label.pack(fill='x')
         self.asmr_volume_scale.pack(fill='x')
-        self.asmr_label.pack()
+        
+        #self.asmr_left_button.pack(side=tk.LEFT)
+        #self.asmr_right_button.pack(side=tk.RIGHT)
+        
+        self.asmr_label.pack(fill='x')
         self.asmr_button_frame.pack(fill='x')
         self.asmr_button_frame.columnconfigure(index=0,weight=1)
         self.asmr_button_frame.columnconfigure(index=1,weight=2)
-        self.select_asmr_track_button.grid(row=0,column=0) 
+        self.asmr_select_button.grid(row=0,column=0) 
         self.asmr_clear_b.grid(row=0,column=1)
 
         self.bgm_volume_label.pack(fill='x')
@@ -184,7 +207,7 @@ class App:
         self.bgm_button_frame.pack(fill='x')
         self.bgm_button_frame.columnconfigure(index=0,weight=1)
         self.bgm_button_frame.columnconfigure(index=1,weight=2)
-        self.select_bgm_track_button.grid(row=0,column=0) 
+        self.bgm_select_button.grid(row=0,column=0) 
         self.bgm_clear_b.grid(row=0,column=1)
         
         self.mute_all.pack()
@@ -210,14 +233,12 @@ class App:
         self.exit_button.pack(fill='x')
         
         tk.Button(self.window, text='debug',command=self.debug).pack() #for debugging purposes 
-
+        
     def debug(self):
-        self.foo()
-        #~fits about 93 a's
-        #~fits about 196 l's
+        pass
 
     def update(self, var, indx, mode):
-        self.duration_label.config(text=self.s1.get())
+        self.duration_label.config(text=self.duration_str.get())
 
     def logupdate(self, var, indx, mode):
         self.log.config(text=self.messages.get())
@@ -236,20 +257,26 @@ class App:
     def msg_down(self):
         pass
 
-    def mix(self): #with threading 
+    def mix(self): #rewrite with writer queue and consumer 
         if len(self.asmr_path) and len(self.bgm_path):
-            x = threading.Thread(target=self.writer.mix,args = (
-                self.asmr_path,
+            self.post("Item added to mixing queue.")
+            self.writer_queue.put((self.writer.mix,
+            (
+                self.asmr_path[self.asmr_pointer],
                 self.bgm_path,
                 self.asmr_volume_scale.get(),
                 self.bgm_volume_scale.get(),
-                self.automatic_directory.get(),
-                self.output_format.get()
-                ), daemon=True)
-            x.start()
+                self.output_format.get(),
+                self, #pass self as argument to get confirmation message after completion
+                )))
         else:
             self.post("Error with mix - please load audio files to be mixed.")
 
+    def batch_mix(self):
+        #ask for list of directories
+        pass
+
+            
     def asmr_volume(self, *args):
         if len(self.asmr_path) != 0: #check that asmr file is loaded
             if self.mute_allv.get(): #check that mute all isn't enabled
@@ -261,35 +288,39 @@ class App:
     def bgm_volume(self, *args):
         if len(self.bgm_path) != 0:
             if self.mute_allv.get():
-                self.bgm_track.set_volume(0)
+                self.bgm_path[self.bgm_pointer][0].set_volume(0)
                 return 
             else:
-                self.bgm_track.set_volume(self.bgm_volume_scale.get()/100)
+                self.bgm_path[self.bgm_pointer][0].set_volume(self.bgm_volume_scale.get()/100)
 
     def both_volume(self, *other):
         self.asmr_volume()
         self.bgm_volume()
-
-            
-    def select_asmr_track(self):
+        
+    def asmr_select(self):
         ans = tk.filedialog.askopenfilenames()
-        if len(ans) != 0: 
-            self.asmr_path = ans 
-        else:
-            return #abort if no file is pecified
-        if len(self.asmr_path) == 1 and type(self.asmr_path) == tuple:
-            self.asmr_path = self.asmr_path[0] #unpack tuple 
-        elif type(self.asmr_path) != tuple:
-            pass
-        elif len(self.asmr_path) != 1 and type(self.asmr_path) == tuple:
-            #multiple files specified, concatenate them and store result in temp 
-            print('Concatenating files...')
-            self.asmr_path = self.writer.concatenate(self.asmr_path)
+        if len(ans) == 0: 
+            return
+        
+        print(type(ans))
 
+        if len(ans) == 1 and type(ans) == tuple:
+            print('asds')
+            self.asmr_path.append(ans[0])
+            self.asmr_pointer = len(self.asmr_path) - 1
+        self.asmr_load()
+
+    def asmr_load(self):
+        if self.asmr_pointer < 0:
+            if len(self.asmr_path) == 0: 
+                return
+            else:
+                self.asmr_pointer = 0 #set pointer to first song if songlist is not empty 
         self.post('Loading ASMR track...')
-        pygame.mixer.music.load(self.asmr_path)
-        self.asmr_track_length = self.writer.getDuration(self.asmr_path)
-        self.asmr_label.config(text=Path(self.asmr_path).stem)
+        track = self.asmr_path[self.asmr_pointer]
+        pygame.mixer.music.load(track)
+        self.asmr_track_length = self.writer.getDuration(track)
+        self.asmr_label.config(text=Path(track).stem)
 
         if self.copyv.get() == True:
             self.asmr_copy()
@@ -304,18 +335,22 @@ class App:
         self.asmr_volume('dummy-event')
         #self.bgm_volume('dummy-event')
         self.Song_position_auto()
-    
+
+    def asmr_stop(self):
+        self.asmr_track_length = 0
+        self.asmr_label.config(text='No track')
+        self.song_position_scale.set(0)
+        self.song_position_scale.config(state=tk.DISABLED)
+        self.new_scale_position = 0
+
     def asmr_clear(self):
         if len(self.asmr_path) != 0:
             pygame.mixer.music.stop()
-            self.asmr_track_length = 0
-            self.asmr_path = ''
-            self.asmr_label.config(text='No track')
-            self.song_position_scale.set(0)
-            self.song_position_scale.config(state=tk.DISABLED)
-            self.new_scale_position = 0
-        
+            self.asmr_stop()
+            self.asmr_path.pop(self.asmr_pointer)
             self.post("ASMR track cleared.")
+            self.asmr_pointer -= 1 #shift pointer backwards 
+            self.asmr_load() #load the next song in list, if existing 
 
     def asmr_copy(self):
         #check that library/asmr directory exists
@@ -332,30 +367,40 @@ class App:
                 #TODO ask user if rename + copy is desired 
 
 
-    def select_bgm_track(self):
-        ans = tk.filedialog.askopenfilename()
+    def bgm_select(self):
+        ans = tk.filedialog.askopenfilenames()
         if len(ans) != 0:
+            self.post('Loading BGM track...') 
             if len(self.bgm_path) !=0: #stop bgm track if already playing 
-                self.bgm_track.stop()
-            self.bgm_path = ans
-        else:
-            return #abort if no file is selected
-
-        self.post('Loading BGM track...') 
+                self.bgm_path[self.bgm_pointer][0].stop()
+            if len(ans) == 1:
+                self.bgm_path.append((pygame.mixer.Sound(ans[0]),Path(ans[0]).stem))
+                self.bgm_pointer = len(self.bgm_path) - 1 
+            else:
+                return #abort if no file is selected
         if self.copyv.get() == True:
             self.bgm_copy()
-        self.bgm_track = pygame.mixer.Sound(self.bgm_path)
-        self.bgm_track.play(-1) #loop indefinitely
-        self.bgm_label.config(text=Path(self.bgm_path).stem)
+        self.bgm_load()
+
+    def bgm_load(self):
+        self.bgm_path[self.bgm_pointer][0].play(-1)
+        self.bgm_label.config(text=self.bgm_path[self.bgm_pointer][1])
         self.bgm_volume('dummy-event')
         self.post('BGM track loaded.')
 
+    def bgm_stop(self):
+        self.bgm_path[self.bgm_pointer][0].stop()
+        self.bgm_label.config(text='No track')
+
     def bgm_clear(self):
         if len(self.bgm_path)!=0:
-            self.bgm_path = ''
-            self.bgm_track.stop()
-            self.bgm_label.config(text='No track')
+
+            self.bgm_stop()
             self.post("BGM track cleared.")
+            self.bgm_path.pop(self.bgm_pointer)
+            self.bgm_pointer -= 1 
+
+            self.bgm_load()
     
     def bgm_copy(self):
         #check that library/asmr directory exists
@@ -381,21 +426,21 @@ class App:
                 self.song_position_scale.set(round(pygame.mixer.music.get_pos()/1000 /self.asmr_track_length,4) + self.new_scale_position)
                 self.window.after(500, self.Song_position_auto)
             elif not pygame.mixer.music.get_busy(): #either asmr isn't loaded or manual song position was set
-                if self.asmr_path == '':
+                if len(self.asmr_path) == 0:
                     pass
                 else:
                     self.song_position_scale.set(0)
                     pygame.mixer.music.play(start = int(self.song_position_scale.get() * self.asmr_track_length))
                     self.new_scale_position = 0 
                     self.window.after(500, self.Song_position_auto)
-        self.s1.set(f'{self.hhmmss(int(self.song_position_scale.get() * self.asmr_track_length))} / {self.hhmmss(self.asmr_track_length)}')
+        self.duration_str.set(f'{self.hhmmss(int(self.song_position_scale.get() * self.asmr_track_length))} / {self.hhmmss(self.asmr_track_length)}')
 
     def Song_position_manual(self,event):
         self.new_scale_position = self.song_position_scale.get()
         #pygame.mixer.music.stop() 
         pygame.mixer.music.play(start = int(self.song_position_scale.get() * self.asmr_track_length))
         self.fasp = False #re-enable auto-songposition after mouse button release event is detected
-        self.s1.set(f'{self.hhmmss(int(self.song_position_scale.get() * self.asmr_track_length))} / {self.hhmmss(self.asmr_track_length)}')
+        self.duration_str.set(f'{self.hhmmss(int(self.song_position_scale.get() * self.asmr_track_length))} / {self.hhmmss(self.asmr_track_length)}')
 
     def Freeze_auto_song_position(self,event):
         self.fasp = True
@@ -421,3 +466,28 @@ class App:
 
     def foo(self):
         ans = tk.messagebox.askquestion('Confirmation Window','Are you sure you wish to proceed?')
+
+    def asmr_left(self):
+        if self.asmr_pointer > 0:
+            self.asmr_stop()
+            self.asmr_pointer -= 1
+            self.asmr_load()
+
+    def asmr_right(self):
+        if self.asmr_pointer < len(self.asmr_path) - 1:
+            self.asmr_stop()
+            self.asmr_pointer += 1
+            self.asmr_load()
+
+    def bgm_left(self):
+        if self.bgm_pointer > 0:
+            self.bgm_stop()
+            self.bgm_pointer -= 1
+            self.bgm_load()
+
+    def bgm_right(self):
+        if self.bgm_pointer < len(self.bgm_path) - 1:
+            self.bgm_stop()
+            self.bgm_pointer += 1
+            self.bgm_load() 
+    
