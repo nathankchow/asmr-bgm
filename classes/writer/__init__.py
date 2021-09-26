@@ -113,14 +113,15 @@ class Consumer(threading.Thread):
     def __init__(self, wq):
         self.wq = wq #writer queue instance  
         super().__init__(daemon=True)
+        self.busy = False
     
     def run(self):
         while True:
             if self.wq.empty() == False:    
-                print('Getting item..') 
                 task = self.wq.get()
-                print(type(task[1]))
+                self.busy = True
                 task[0](*task[1]) #takes tuple of length 2 containing callable and arguments 
+                self.busy = False
             time.sleep(1)
 
 

@@ -30,6 +30,9 @@ other:
 native functions
 
 TODO
+buttons:
+concatenate
+convert to common format 
 
 
 '''
@@ -87,6 +90,7 @@ class App:
 
         self.create_widgets()
         self.position_widgets()
+        self.window_bindings()
         self.post('Welcome to asmr-bgm-gui.')
         
 
@@ -105,7 +109,7 @@ class App:
         self.arrow_frame.columnconfigure(0,weight=1)
 
         self.mix_button = tk.Button(self.window, text="Mix!", command = self.mix)
-        self.batch_mix_button = tk.Button(self.window, text="Mix!", command = self.batch_mix)
+        self.batch_mix_button = tk.Button(self.window, text="Batch mix", command = self.batch_mix)
         
         self.duration_str = tk.StringVar(self.window, "00:00:00 / 00:00:00")
         self.duration_str.trace('w',self.update)
@@ -168,12 +172,14 @@ class App:
         self.upb = tk.Button(self.arrow_frame,text='↑',command=self.up)
         self.downb = tk.Button(self.arrow_frame,text='↓',command=self.down)
 
-        self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
+        self.exit_button = tk.Button(self.window,text="Exit",command=self.exit)
         #self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
         self.asmr_left_button = tk.Button(self.asmr_frame, text = '◀', command = self.asmr_left)
         self.asmr_right_button = tk.Button(self.asmr_frame, text = '▶', command = self.asmr_right)
         self.bgm_left_button = tk.Button(self.window, text = '◀', command = self.bgm_left)
         self.bgm_right_button = tk.Button(self.window, text = '▶', command = self.bgm_right)
+
+       
     
     def position_widgets(self):
 
@@ -234,6 +240,15 @@ class App:
         
         tk.Button(self.window, text='debug',command=self.debug).pack() #for debugging purposes 
         
+    def window_bindings(self):
+        #bind keyboard shortcuts to top window
+        self.window.bind("<Control-a>", self.asmr_select)
+        self.window.bind("<Control-b>", self.bgm_select)
+        self.window.bind("<Control-m>", self.mute_hotkey)
+        self.window.bind("<Control-h>", self.help)
+        self.window.bind("<Control-Return>", self.mix)
+
+
     def debug(self):
         pass
 
@@ -257,7 +272,7 @@ class App:
     def msg_down(self):
         pass
 
-    def mix(self): #rewrite with writer queue and consumer 
+    def mix(self, *others): 
         if len(self.asmr_path) and len(self.bgm_path):
             self.post("Item added to mixing queue.")
             self.writer_queue.put((self.writer.mix,
@@ -274,7 +289,24 @@ class App:
 
     def batch_mix(self):
         #ask for list of directories
-        pass
+        ans = tk.filedialog.askopenfilenames()
+        for file in ans:
+            if self.assert_audio_file(file):
+                self.writer_queue.put(
+                    (self.writer.mix,
+                        (
+                            file,
+                            self.bgm_path[self.bgm_pointer],
+                            self.asmr_volume_scale.get(),
+                            self.bgm_volume_scale.get(),
+                            self.output_format.get(),
+                            self, #pass self as argument to get confirmation message after completion
+                        )      
+                    )
+                )
+    
+    def assert_audio_file(self, file): #assert that the audio file is 
+        return True
 
             
     def asmr_volume(self, *args):
@@ -297,7 +329,7 @@ class App:
         self.asmr_volume()
         self.bgm_volume()
         
-    def asmr_select(self):
+    def asmr_select(self, *others):
         ans = tk.filedialog.askopenfilenames()
         if len(ans) == 0: 
             return
@@ -367,14 +399,14 @@ class App:
                 #TODO ask user if rename + copy is desired 
 
 
-    def bgm_select(self):
+    def bgm_select(self, *others):
         ans = tk.filedialog.askopenfilenames()
         if len(ans) != 0:
             self.post('Loading BGM track...') 
             if len(self.bgm_path) !=0: #stop bgm track if already playing 
                 self.bgm_path[self.bgm_pointer][0].stop()
             if len(ans) == 1:
-                self.bgm_path.append((pygame.mixer.Sound(ans[0]),Path(ans[0]).stem))
+                self.bgm_path.append((pygame.mixer.Sound(ans[0]),ans)) #tuple containing sound object and full path 
                 self.bgm_pointer = len(self.bgm_path) - 1 
             else:
                 return #abort if no file is selected
@@ -384,7 +416,7 @@ class App:
 
     def bgm_load(self):
         self.bgm_path[self.bgm_pointer][0].play(-1)
-        self.bgm_label.config(text=self.bgm_path[self.bgm_pointer][1])
+        self.bgm_label.config(text=Path(self.bgm_path[self.bgm_pointer][1]).stem)
         self.bgm_volume('dummy-event')
         self.post('BGM track loaded.')
 
@@ -407,10 +439,10 @@ class App:
         if os.path.isdir("library/bgm") != True:
             self.post("./library/bgm/ directory does not exist, copying aborted.")
         else:   #check for duplicity of file
-            file = os.path.join("library","bgm",Path(self.bgm_path).name)
+            file = os.path.join("library","bgm",self.bgm_path[self.bgm_pointer][1])
             if os.path.isfile(file) == False:
                 self.post("Copying BGM file into library directory...")
-                shutil.copy2(self.bgm_path, file)
+                shutil.copy2(self.bgm_path[self.bgm_pointer][1], file) 
                 self.post("Copying completed.")
             elif os.path.isfile(file) == True:
                 self.post("A duplicate file already exists in the same directory, copying aborted.")
@@ -491,3 +523,21 @@ class App:
             self.bgm_pointer += 1
             self.bgm_load() 
     
+
+    def concatenate(self):
+        pass 
+
+    def exit(self):
+        if tk.messagebox.askyesno(title='Confirmation', message="Are you sure you want to quit?"):
+            self.window.quit()
+        else:
+            pass
+    
+    def mute_hotkey(self, *others): #
+        if self.mute_allv.get():
+            self.mute_allv.set(False)
+        elif not self.mute_allv.get():
+            self.mute_allv.set(True)
+
+    def help(self, *others):
+        pass 
