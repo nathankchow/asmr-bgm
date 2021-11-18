@@ -13,6 +13,12 @@ class Writer:
     def __init__(self):
         pass
 
+    def wav_to_flac(self, file):
+        os.system(
+            f'ffmpeg -i {file} temp/{Path(file).stem}.flac'
+        )
+        return f'temp/{Path(file).stem}.flac'
+
     def emptyTempFolder(self):
         for file in os.listdir('temp'):
             os.remove(os.path.join('temp',file))
@@ -96,7 +102,7 @@ class Writer:
         
         print(app)
         if app != None: 
-            print('posting stomethign')
+            print('posting test') ##
             app.post(f"Mixing of {dst} complete.")
 
     def convert_to_mp3(self,files):
