@@ -58,7 +58,7 @@ import threading
 class App:
     def __init__(self):
         self.MIN_X = 640
-        self.MIN_Y = 800
+        self.MIN_Y =470
         self.window = TkinterDnD.Tk()
         self.window.resizable(0,0) # removes windows-native maximize button
         #self.window.geometry("640x500")
@@ -92,6 +92,7 @@ class App:
         self.post('Welcome to asmr-bgm-gui.')
         self.post('Windows drag and drop support enabled! Drag files into ASMR or BGM sections!')
         
+
     def enable_dragdrop(self):
         def asmr_drop(event):
             print('testing>')
@@ -197,10 +198,10 @@ class App:
 
         self.exit_button = tk.Button(self.window,text="Exit",command=self.exit)
         #self.exit_button = tk.Button(self.window,text="Exit",command=self.window.quit)
-        self.asmr_left_button = tk.Button(self.asmr_button_frame, text = '◀', command = self.asmr_left)
-        self.asmr_right_button = tk.Button(self.asmr_button_frame, text = '▶', command = self.asmr_right)
-        self.bgm_left_button = tk.Button(self.bgm_button_frame, text = '◀', command = self.bgm_left)
-        self.bgm_right_button = tk.Button(self.bgm_button_frame, text = '▶', command = self.bgm_right)
+        self.asmr_left_button = tk.Button(self.asmr_button_frame, text = '|◀◀', command = self.asmr_left)
+        self.asmr_right_button = tk.Button(self.asmr_button_frame, text = '▶▶|', command = self.asmr_right)
+        self.bgm_left_button = tk.Button(self.bgm_button_frame, text = '|◀◀', command = self.bgm_left)
+        self.bgm_right_button = tk.Button(self.bgm_button_frame, text = '▶▶|', command = self.bgm_right)
 
        
     
@@ -208,7 +209,7 @@ class App:
 
         #packing 
         self.mix_button.pack(fill="x")
-        self.batch_mix_button.pack()
+        self.batch_mix_button.pack(fill='x')
         self.duration_label.pack()
         self.song_position_scale.pack(fill="x")
         self.asmr_bgm_frame.pack(fill='x') 
@@ -269,10 +270,8 @@ class App:
         self.downb.grid(row=1,column=0,sticky='nsew')
         self.log.pack(fill='x')
 
-        self.exit_button.pack(fill='x')
-        
-        tk.Button(self.window, text='debug',command=self.debug).pack() #for debugging purposes 
-        
+        self.exit_button.pack(fill='both',expand=True)
+                
     def window_bindings(self):
         #bind keyboard shortcuts to top window
         self.window.bind("<Control-a>", self.asmr_select)
