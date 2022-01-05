@@ -43,7 +43,7 @@ import tkinter.filedialog
 import tkinter.messagebox
 import tkinter.ttk as ttk 
 import tkinter as tk
-from tkinterdnd2 import * 
+from tkinterdnd2 import *
 import pygame
 import os
 import sys
@@ -59,7 +59,7 @@ class App:
     def __init__(self):
         self.MIN_X = 640
         self.MIN_Y = 800
-        self.window = tk.Tk()
+        self.window = TkinterDnD.Tk()
         self.window.resizable(0,0) # removes windows-native maximize button
         #self.window.geometry("640x500")
         self.window.minsize(self.MIN_X,self.MIN_Y)
@@ -76,8 +76,8 @@ class App:
         self.new_scale_position = 0 
         self.writer = Writer()
         self.messages = Messages(self)
-        self.writer_busy = False
         self.writer_queue = [] 
+        self.writer_busy = False
         self.fasp = False #freeze auto song position, for when user is clicking on seeking slider
 
 
@@ -88,12 +88,37 @@ class App:
         self.create_widgets()
         self.position_widgets()
         self.window_bindings()
+        self.enable_dragdrop()
         self.post('Welcome to asmr-bgm-gui.')
+        self.post('Windows drag and drop support enabled! Drag files into ASMR or BGM sections!')
         
+    def enable_dragdrop(self):
+        def asmr_drop(event):
+            print('testing>')
+            if event.data:
+                print(type(event.data))
+                files = self.window.tk.splitlist(event.data)
+                for f in files:
+                    if os.path.exists(f):
+                        self.asmr_select(f)         
+        def bgm_drop(event):
+            print('testing>')
+            if event.data:
+                print(type(event.data))
+                files = self.window.tk.splitlist(event.data)
+                for f in files:
+                    if os.path.exists(f):
+                        self.bgm_select(f)                                  
+        self.asmr_frame.drop_target_register(1, DND_TEXT, DND_FILES)
+        self.bgm_frame.drop_target_register(1,DND_TEXT, DND_FILES)
+        self.asmr_frame.dnd_bind('<<Drop>>', asmr_drop)
+        self.bgm_frame.dnd_bind('<<Drop>>', bgm_drop)
+
 
     def create_widgets(self):
         self.asmr_bgm_frame = tk.Frame(self.window)
         self.asmr_frame = tk.Frame(self.asmr_bgm_frame,borderwidth=1,relief=tk.RIDGE)
+        
         self.bgm_frame = tk.Frame(self.asmr_bgm_frame,borderwidth=1,relief=tk.RIDGE)
         self.asmr_button_frame = tk.Frame(self.asmr_frame)
         self.bgm_button_frame = tk.Frame(self.bgm_frame)
@@ -135,7 +160,7 @@ class App:
         self.bgm_select_button = tk.Button(self.bgm_button_frame, text="Select BGM track(s)", command = self.bgm_select)
  
         self.mute_allv = tk.BooleanVar(self.window,False)
-        self.mute_all = tk.Checkbutton(self.window, text='Mute all audio tracks', variable=self.mute_allv)
+        self.mute_all = tk.Checkbutton(self.window, text='Mute all audio tracks (Ctrl+M)', variable=self.mute_allv)
         self.mute_allv.trace('w',self.muted)
 
         self.copyv = tk.BooleanVar(self.window,False)
@@ -191,6 +216,7 @@ class App:
         self.asmr_bgm_frame.columnconfigure(1,weight=1)
         self.asmr_frame.grid(row=0,column=0,sticky='nsew')
         self.bgm_frame.grid(row=0,column=1,sticky='nsew')
+        
 
         self.asmr_volume_label.pack(fill='x')
         self.asmr_volume_scale.pack(fill='x')
@@ -256,7 +282,6 @@ class App:
         self.window.bind("<Control-Return>", self.mix)
         self.window.protocol("WM_DELETE_WINDOW", self.exit)
 
-
     def debug(self):
         pass
 
@@ -273,12 +298,6 @@ class App:
     def down(self):
         self.messages.down()
         self.log.config(text=self.messages.get())
-
-    def msg_up(self):
-        pass
-
-    def msg_down(self):
-        pass
 
     def mix(self, *others): 
         if len(self.asmr_path) and len(self.bgm_path):
@@ -338,7 +357,10 @@ class App:
         self.bgm_volume()
         
     def asmr_select(self, *others):
-        ans = tk.filedialog.askopenfilenames()
+        if len(others) == 0:
+            ans = tk.filedialog.askopenfilenames()
+        else:
+            ans = (others[0],)
         if len(ans) == 0: 
             return
         else:
@@ -347,11 +369,9 @@ class App:
                     file = self.writer.wav_to_flac(file)
                 if self.assert_audio_file(file):
                     self.asmr_path.append(file)
+                self.asmr_pointer = len(self.asmr_path) - 1
                 if self.copyv == True:
-                    self.asmr_pointer = len(self.asmr_path) - 1
                     self.asmr_copy()
-
-        self.asmr_pointer = len(self.asmr_path) - 1
         self.asmr_load()
 
     def asmr_load(self):
@@ -390,7 +410,6 @@ class App:
             pygame.mixer.music.stop()
             self.asmr_stop()
             self.asmr_path.pop(self.asmr_pointer)
-            self.post("ASMR track cleared.")
             self.asmr_pointer -= 1 #shift pointer backwards 
             self.asmr_load() #load the next song in list, if existing 
 
@@ -410,7 +429,10 @@ class App:
 
 
     def bgm_select(self, *others):
-        ans = tk.filedialog.askopenfilenames()
+        if len(others) == 0:
+            ans = tk.filedialog.askopenfilenames()
+        else:
+            ans = (others[0],)
         if len(ans) != 0:
             if len(self.bgm_path) !=0: #stop bgm track if already playing 
                 self.bgm_path[self.bgm_pointer][0].stop()
@@ -440,7 +462,6 @@ class App:
         if len(self.bgm_path)!=0:
 
             self.bgm_stop()
-            self.post("BGM track cleared.")
             self.bgm_path.pop(self.bgm_pointer)
             self.bgm_pointer -= 1 
 
@@ -558,10 +579,11 @@ class App:
         pass 
 
     def exit(self):
-        if tk.messagebox.askyesno(title='Confirmation', message="Are you sure you want to quit?"):
-            self.window.quit()
-        else:
-            pass
+        self.window.quit()
+        # if tk.messagebox.askyesno(title='Confirmation', message="Are you sure you want to quit?"):
+        #     self.window.quit()
+        # else:
+        #     pass
     
     def mute_hotkey(self, *others): #
         if self.mute_allv.get():
@@ -573,9 +595,10 @@ class App:
         pass 
 
     def asmr_clear_all(self, *others):
-        self.asmr_stop() 
-        self.asmr_path = []
+        while len(self.asmr_path) != 0:
+            self.asmr_clear()
+
     
     def bgm_clear_all(self, *others):
-        self.bgm_stop()
-        self.bgm_path = []
+        while len(self.bgm_path) != 0:
+            self.bgm_clear()
